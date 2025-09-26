@@ -21,7 +21,7 @@ class ReActAgent:
         self.memory = memory
         self.client = OpenAI(
             base_url="https://api.deepseek.com",
-            api_key=ReActAgent.get_api_key(),
+            api_key=self.get_api_key(),
         )
 
     def run(self, user_input: str):
@@ -117,13 +117,47 @@ class ReActAgent:
             memory_snippets,
         )
 
-    @staticmethod
-    def get_api_key() -> str:
+    def get_api_key(self) -> str:
+        # 1) 直接读取环境变量
+        api_key = os.getenv("DEEPSEEK_API_KEY")
+        if api_key:
+            return api_key
+
+        # 2) 尝试按优先级加载多个 .env 位置（不覆盖已有环境变量）
+        candidate_env_paths = []
+        try:
+            if self.project_directory:
+                candidate_env_paths.append(os.path.join(self.project_directory, ".env"))
+        except Exception:
+            pass
+        candidate_env_paths.extend([
+            os.path.join(os.getcwd(), ".env"),
+            os.path.expanduser("~/.codeagent/.env"),
+            os.path.expanduser("~/.config/codeagent/.env"),
+        ])
+
+        for p in candidate_env_paths:
+            if p and os.path.isfile(p):
+                load_dotenv(p, override=False)
+                api_key = os.getenv("DEEPSEEK_API_KEY")
+                if api_key:
+                    return api_key
+
+        # 3) 最后再尝试默认搜索（当前工作目录向上）
         load_dotenv()
         api_key = os.getenv("DEEPSEEK_API_KEY")
-        if not api_key:
-            raise ValueError("未找到 DEEPSEEK_API_KEY 环境变量，请在 .env 文件中设置。")
-        return api_key
+        if api_key:
+            return api_key
+
+        raise ValueError(
+            "未找到 DEEPSEEK_API_KEY。请通过以下任一方式配置：\n"
+            "1) 在 shell 中导出：export DEEPSEEK_API_KEY=...\n"
+            "2) 在当前项目或全局路径创建 .env：\n"
+            "   - ./ .env\n"
+            "   - ~/.codeagent/.env\n"
+            "   - ~/.config/codeagent/.env\n"
+            "   文件内容：DEEPSEEK_API_KEY=你的Key"
+        )
 
     def call_model(self, messages):
         print("\n\n正在请求模型，请稍等...")

@@ -10,7 +10,6 @@ https://docs.astral.sh/uv/guides/install-python/
 DEEPSEEK_API_KEY=你的DeepSeek API Key
 ```
 
-如果你之前使用 OpenRouter，现在已经改为使用 DeepSeek 官方 API（base_url: https://api.deepseek.com）。
 
 确保 uv 已经安装成功后，进入到当前文件所在目录，然后执行以下命令即可启动：
 
@@ -26,6 +25,39 @@ uv run agent.py /absolute/path/to/your/project
 
 ```bash
 uv run codeagent
+全局使用（推荐其一）：
+
+1) 使用 uv tool（类似 pipx）：
+```bash
+uv tool install --force .
+# 若提示未在 PATH，请把 ~/.local/bin 加入 PATH：
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
+```
+
+2) 使用 pipx：
+```bash
+pipx install .
+```
+
+然后在任意项目目录执行：
+```bash
+codeagent
+```
+
+API Key 配置（多种方式，按优先级读取）：
+- 直接在 shell 导出：
+```bash
+export DEEPSEEK_API_KEY=你的Key
+```
+- 在项目根或全局放置 .env 文件（不会覆盖已导出的变量）：
+```
+./.env                     # 项目级
+~/.codeagent/.env          # 用户级（推荐）
+~/.config/codeagent/.env   # 用户级备用
+
+# 内容：
+DEEPSEEK_API_KEY=你的Key
+```
 恢复会话：
 
 ```bash
@@ -41,26 +73,3 @@ codeagent --resume-last
 - 多次输入任务相互独立（本阶段不保留跨轮记忆）
 - 退出：输入 `/exit` 或使用 `Ctrl+C`/`Ctrl+D`
 
-项目结构已模块化：
-
-```
-code_agent/
-  ├─ cli.py           # 会话入口
-  ├─ agent.py         # ReActAgent 实现
-  ├─ session.py       # 会话存储（messages/summary/config）
-  ├─ memory.py        # 结构化记忆（memory.jsonl 持久化与检索）
-  ├─ tools.py         # 工具封装（读写文件、终端命令）
-  └─ prompt.py        # 系统提示构建
-agent.py              # 兼容旧入口（代理到 code_agent.cli.chat）
-```
-
-结构化记忆：
-- 每轮结束从“用户输入+最终回答”抽取 0~3 条短句记忆，去重后写入 `.codeagent/memory.jsonl`
-- 每次新任务按关键词/重要度/新近性检索 Top-K 记忆并注入到系统提示前缀
-- 目前为简易关键词检索，后续可扩展为向量检索
-
-一次性模式（旧方式）仍可：
-
-```bash
-uv run agent.py
-```
