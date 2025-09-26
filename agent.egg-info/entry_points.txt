@@ -1,2 +1,0 @@
-[console_scripts]
-codeagent = code_agent.cli:chat
