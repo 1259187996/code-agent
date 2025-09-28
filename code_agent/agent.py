@@ -5,7 +5,6 @@ from typing import List, Callable, Tuple
 
 import platform
 from openai import OpenAI
-from dotenv import load_dotenv
 
 from .session import SessionStore
 from .memory import MemoryStore
@@ -118,46 +117,15 @@ class ReActAgent:
         )
 
     def get_api_key(self) -> str:
-        # 1) 直接读取环境变量
+        """仅从环境变量读取 API Key，确保全局可用且行为一致。"""
         api_key = os.getenv("DEEPSEEK_API_KEY")
-        if api_key:
-            return api_key
-
-        # 2) 尝试按优先级加载多个 .env 位置（不覆盖已有环境变量）
-        candidate_env_paths = []
-        try:
-            if self.project_directory:
-                candidate_env_paths.append(os.path.join(self.project_directory, ".env"))
-        except Exception:
-            pass
-        candidate_env_paths.extend([
-            os.path.join(os.getcwd(), ".env"),
-            os.path.expanduser("~/.codeagent/.env"),
-            os.path.expanduser("~/.config/codeagent/.env"),
-        ])
-
-        for p in candidate_env_paths:
-            if p and os.path.isfile(p):
-                load_dotenv(p, override=False)
-                api_key = os.getenv("DEEPSEEK_API_KEY")
-                if api_key:
-                    return api_key
-
-        # 3) 最后再尝试默认搜索（当前工作目录向上）
-        load_dotenv()
-        api_key = os.getenv("DEEPSEEK_API_KEY")
-        if api_key:
-            return api_key
-
-        raise ValueError(
-            "未找到 DEEPSEEK_API_KEY。请通过以下任一方式配置：\n"
-            "1) 在 shell 中导出：export DEEPSEEK_API_KEY=...\n"
-            "2) 在当前项目或全局路径创建 .env：\n"
-            "   - ./ .env\n"
-            "   - ~/.codeagent/.env\n"
-            "   - ~/.config/codeagent/.env\n"
-            "   文件内容：DEEPSEEK_API_KEY=你的Key"
-        )
+        if not api_key:
+            raise ValueError(
+                "未找到 DEEPSEEK_API_KEY 环境变量。请先在 shell 中执行：\n"
+                "export DEEPSEEK_API_KEY=你的Key\n"
+                "并确保在终端启动时自动加载（例如写入 ~/.zshrc）。"
+            )
+        return api_key
 
     def call_model(self, messages):
         print("\n\n正在请求模型，请稍等...")

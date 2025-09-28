@@ -44,19 +44,10 @@ pipx install .
 codeagent
 ```
 
-API Key 配置（多种方式，按优先级读取）：
-- 直接在 shell 导出：
+API Key（仅环境变量，必须设置）：
 ```bash
 export DEEPSEEK_API_KEY=你的Key
-```
-- 在项目根或全局放置 .env 文件（不会覆盖已导出的变量）：
-```
-./.env                     # 项目级
-~/.codeagent/.env          # 用户级（推荐）
-~/.config/codeagent/.env   # 用户级备用
-
-# 内容：
-DEEPSEEK_API_KEY=你的Key
+# 建议写入 ~/.zshrc 以便终端启动时自动生效
 ```
 恢复会话：
 
