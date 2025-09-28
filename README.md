@@ -44,6 +44,15 @@ pipx install .
 codeagent
 ```
 
+首次使用向量检索（会自动下载小模型，CPU 可用）：
+```bash
+codeagent --reindex-memory --embed-model all-MiniLM-L6-v2
+```
+说明：
+- 我们使用 sentence-transformers 的小模型将记忆编码成向量，并用 FAISS 建本地索引。
+- 索引位置：`.codeagent/index/<模型名>/`；真值库仍是 `.codeagent/memory.jsonl`。
+- 检索时会混合“向量相似度 + 重要度 + 新近性 + 关键词”重排，自动注入 Top-K 记忆。
+
 API Key（仅环境变量，必须设置）：
 ```bash
 export DEEPSEEK_API_KEY=你的Key

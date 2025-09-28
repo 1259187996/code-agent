@@ -11,7 +11,9 @@ from .agent import ReActAgent
 @click.command()
 @click.option("--load", "load_session_id", type=str, default=None, help="加载指定的 session_id 继续会话")
 @click.option("--resume-last", is_flag=True, help="恢复最近一次会话")
-def chat(load_session_id: str | None, resume_last: bool):
+@click.option("--embed-model", type=str, default="all-MiniLM-L6-v2", help="向量模型名（sentence-transformers）")
+@click.option("--reindex-memory", is_flag=True, help="重建记忆向量索引")
+def chat(load_session_id: str | None, resume_last: bool, embed_model: str, reindex_memory: bool):
     """启动会话模式（REPL）。
 
     - 以当前工作目录作为 project_directory 安全边界
@@ -51,7 +53,10 @@ def chat(load_session_id: str | None, resume_last: bool):
         session = SessionStore(project_dir)
         session.init_config(model="deepseek-chat")
         mode_tip = f"新建会话：{session.session_id}"
-    memory = MemoryStore(project_dir)
+    memory = MemoryStore(project_dir, embed_model=embed_model)
+    if reindex_memory:
+        msg = memory.reindex()
+        print(msg)
 
     tools = make_tools(project_dir)
     agent = ReActAgent(tools=tools, model="deepseek-chat", project_directory=project_dir, session=session, memory=memory)
