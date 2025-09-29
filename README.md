@@ -1,75 +1,121 @@
-# 运行方法
+# CodeAgent · 会话式代码智能体
 
-首先请确保你已经安装了 uv，如果没有的话，请按以下页面的要求安装：
+CodeAgent 是一个基于 ReAct 的本地开发助手：支持会话模式、多轮任务、会话摘要持久化、结构化记忆与向量检索（可选）。适合在任意项目目录中进行“像 Claude Code 一样”的连续对话协作。
 
-https://docs.astral.sh/uv/guides/install-python/
+## 特性
+- 会话模式：直接在命令行进入 REPL，多轮对话连续执行
+- 会话摘要：自动将每轮结论提炼为摘要并回灌后续上下文
+- 结构化记忆：跨会话可复用的“事实/约束/命名/契约”存储与检索
+- 向量检索（可选）：使用小型本地向量库（FAISS + sentence-transformers）进行语义检索
+- 安全沙箱：文件读写与命令执行仅允许在当前项目目录内，且必须使用绝对路径
 
-然后在当前目录下，新建一个叫做 .env 的文件，输入以下内容：
+## 环境要求
+- Python ≥ 3.12
+- 已安装 `uv`（推荐）：参考官方安装指南 `https://docs.astral.sh/uv/guides/install-python/`
+- 已设置 DeepSeek API Key（仅环境变量方式）
 
-```
-DEEPSEEK_API_KEY=你的DeepSeek API Key
-```
-
-
-确保 uv 已经安装成功后，进入到当前文件所在目录，然后执行以下命令即可启动：
-
+## 1) 获取代码与本地安装
 ```bash
-uv run agent.py /absolute/path/to/your/project
+# 克隆仓库
+git clone [<your-repo-url>](https://github.com/1259187996/code-agent.git) code-agent && cd code-agent
+
+# 创建并激活虚拟环境
+uv venv
+source .venv/bin/activate
+
+# 安装依赖（开发模式）
+uv pip install -e .
 ```
 
-模型与接口说明：本项目默认模型为 `deepseek-chat`，请求格式遵循 DeepSeek Chat Completions API。
-
-## 会话模式（REPL）
-
-安装/准备完成后，可以使用会话模式直接进入多轮任务交互：
-
+## 2) 配置 API Key（必需）
+仅支持环境变量方式：
 ```bash
-uv run codeagent
-全局使用（推荐其一）：
+export DEEPSEEK_API_KEY=你的Key
+# 建议写入 ~/.zshrc 以便每次终端启动自动生效
+# echo 'export DEEPSEEK_API_KEY=你的Key' >> ~/.zshrc && source ~/.zshrc
+```
 
-1) 使用 uv tool（类似 pipx）：
+## 3) 本地使用（当前项目内）
+在你的项目根目录执行：
 ```bash
+codeagent
+```
+说明：
+- 默认将“当前工作目录”作为 `project_dir` 安全边界
+- 退出：输入 `/exit` 或使用 `Ctrl+C` / `Ctrl+D`
+
+若尚未进行全局安装，可使用虚拟环境内脚本：
+```bash
+.venv/bin/codeagent
+```
+
+## 4) 全局安装（可在任意目录使用）
+推荐其一：
+```bash
+# 方案 A：uv tool（类似 pipx）
 uv tool install --force .
-# 若提示未在 PATH，请把 ~/.local/bin 加入 PATH：
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
-```
+# 若提示未在 PATH，请把 ~/.local/bin 加入 PATH
+# echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc && source ~/.zshrc
 
-2) 使用 pipx：
-```bash
+# 方案 B：pipx（需已安装 pipx）
 pipx install .
 ```
-
-然后在任意项目目录执行：
+安装完成后，在任意目录执行：
 ```bash
 codeagent
 ```
 
-首次使用向量检索（会自动下载小模型，CPU 可用）：
+## 5) 向量检索（可选）
+首次启用向量检索时，建议为当前项目构建一次索引（会自动下载小模型，CPU 可用）：
 ```bash
 codeagent --reindex-memory --embed-model all-MiniLM-L6-v2
 ```
-说明：
-- 我们使用 sentence-transformers 的小模型将记忆编码成向量，并用 FAISS 建本地索引。
-- 索引位置：`.codeagent/index/<模型名>/`；真值库仍是 `.codeagent/memory.jsonl`。
-- 检索时会混合“向量相似度 + 重要度 + 新近性 + 关键词”重排，自动注入 Top-K 记忆。
-
-API Key（仅环境变量，必须设置）：
+日常使用直接：
 ```bash
-export DEEPSEEK_API_KEY=你的Key
-# 建议写入 ~/.zshrc 以便终端启动时自动生效
+codeagent
 ```
-恢复会话：
+说明：
+- 真值库：`./.codeagent/memory.jsonl`
+- 向量索引：`./.codeagent/index/<模型名>/index.faiss`
+- 首次重建后，新增记忆将自动“增量编码并写入索引”；检索会混合“向量相似度 + 重要度 + 新近性 + 关键词”进行重排
+- 如切换向量模型（`--embed-model`），建议配合 `--reindex-memory` 重建索引
 
+## 6) 会话管理
+- 新建会话：直接运行 `codeagent` 即创建新会话目录 `./.codeagent/sessions/<session_id>/`
+- 恢复已存在会话：
 ```bash
 # 指定会话 ID 加载
-codeagent --load s_20250926_095037
+codeagent --load s_YYYYMMDD_HHMMSS
 
-# 恢复最近一次
+# 恢复最近一次会话
 codeagent --resume-last
 ```
+会话目录结构（示例）：
+- `./.codeagent/sessions/<session_id>/messages.jsonl`：原始消息（system/user/assistant/observation）
+- `./.codeagent/sessions/<session_id>/summary.md`：会话摘要（每轮覆盖更新）
+- `./.codeagent/sessions/<session_id>/config.json`：会话元数据
+
+## 7) 命令速查
+```bash
+# 进入会话（当前目录作为项目根）
+codeagent
+
+# 指定向量模型并重建索引（首次 / 换模型 / 索引损坏时）
+codeagent --reindex-memory --embed-model all-MiniLM-L6-v2
+
+# 指定模型但不重建（不推荐长期这样使用）
+codeagent --embed-model all-MiniLM-L6-v2
+
+# 恢复会话
+codeagent --load <session_id>
+codeagent --resume-last
 ```
 
-- 默认使用当前工作目录作为项目目录安全边界
-- 多次输入任务相互独立（本阶段不保留跨轮记忆）
-- 退出：输入 `/exit` 或使用 `Ctrl+C`/`Ctrl+D`
+## 8) 常见问题
+- 找不到 `codeagent` 命令：确认 `~/.local/bin` 已加入 PATH（或使用 `.venv/bin/codeagent`）。
+- 提示未找到 `DEEPSEEK_API_KEY`：请先 `export DEEPSEEK_API_KEY=你的Key`，并考虑写入 `~/.zshrc`。
+- 首次向量检索较慢：需下载小模型并构建索引，后续增量很快。
+- 安全限制：工具仅允许绝对路径且必须位于 `project_dir` 内，避免误改他处文件。
+
+---
 
