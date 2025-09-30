@@ -14,12 +14,13 @@ from .prompt import build_system_prompt, react_system_prompt_template
 
 
 class ReActAgent:
-    def __init__(self, tools: List[Callable], model: str, project_directory: str, session: SessionStore | None = None, memory: MemoryStore | None = None):
+    def __init__(self, tools: List[Callable], model: str, project_directory: str, session: SessionStore | None = None, memory: MemoryStore | None = None, system_prefix: str | None = None):
         self.tools = { func.__name__: func for func in tools }
         self.model = model
         self.project_directory = project_directory
         self.session = session
         self.memory = memory
+        self.system_prefix = system_prefix or ""
         self.client = OpenAI(
             base_url="https://api.deepseek.com",
             api_key=self.get_api_key(),
@@ -132,7 +133,7 @@ class ReActAgent:
             for f in os.listdir(self.project_directory)
         )
         summary = self.session.read_summary() if self.session else ""
-        return build_system_prompt(
+        base = build_system_prompt(
             react_system_prompt_template,
             self.get_operating_system_name(),
             tool_list,
@@ -141,6 +142,9 @@ class ReActAgent:
             summary,
             memory_snippets,
         )
+        if self.system_prefix:
+            return f"{self.system_prefix}\n\n⸻\n{base}"
+        return base
 
     def get_api_key(self) -> str:
         """仅从环境变量读取 API Key，确保全局可用且行为一致。"""
