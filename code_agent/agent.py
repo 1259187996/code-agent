@@ -2,7 +2,7 @@ import os
 import ast
 import re
 import inspect
-from typing import List, Callable, Tuple
+from typing import List, Callable, Tuple, Dict, Any
 
 import platform
 from openai import OpenAI
@@ -82,14 +82,16 @@ class ReActAgent:
             if not action_match:
                 raise RuntimeError("模型未输出 <action>")
             action = action_match.group(1)
-            tool_name, args = self.parse_action(action)
+            tool_name, args, kwargs = self.parse_action(action)
 
             # 打印参数时可能包含非字符串（如 int），需安全转换为字符串
             try:
                 args_str = ", ".join(str(a) for a in args)
+                kwargs_str = ", ".join(f"{k}={v!r}" for k, v in (kwargs or {}).items())
+                call_str = ", ".join([s for s in [args_str, kwargs_str] if s])
             except Exception:
-                args_str = ""
-            print(f"\n\n🔧 Action: {tool_name}({args_str})")
+                call_str = ""
+            print(f"\n\n🔧 Action: {tool_name}({call_str})")
             # 终端命令确认策略：支持 RUN_CMD_CONFIRM_MODE = always | never | only_delete（默认 always）
             if tool_name == "run_terminal_command":
                 confirm_mode = self._get_run_command_confirm_mode()
@@ -108,7 +110,7 @@ class ReActAgent:
                 return "操作被用户取消"
 
             try:
-                observation = self.tools[tool_name](*args)
+                observation = self.tools[tool_name](*args, **(kwargs or {}))
             except Exception as e:
                 observation = f"工具执行错误：{str(e)}"
             print(f"\n\n🔍 Observation：{observation}")
@@ -167,7 +169,7 @@ class ReActAgent:
         messages.append({"role": "assistant", "content": content})
         return content
 
-    def parse_action(self, code_str: str) -> Tuple[str, List[str]]:
+    def parse_action(self, code_str: str) -> Tuple[str, List[Any], Dict[str, Any]]:
         import ast
         match = re.match(r'(\w+)\((.*)\)', code_str, re.DOTALL)
         if not match:
@@ -175,7 +177,8 @@ class ReActAgent:
         func_name = match.group(1)
         args_str = match.group(2).strip()
 
-        args: List[str] = []
+        # 先切分顶层逗号分隔的参数片段
+        tokens: List[str] = []
         current_arg = ""
         in_string = False
         string_char = None
@@ -196,7 +199,7 @@ class ReActAgent:
                     paren_depth -= 1
                     current_arg += char
                 elif char == ',' and paren_depth == 0:
-                    args.append(self._parse_single_arg(current_arg.strip()))
+                    tokens.append(current_arg.strip())
                     current_arg = ""
                 else:
                     current_arg += char
@@ -208,8 +211,43 @@ class ReActAgent:
             i += 1
 
         if current_arg.strip():
-            args.append(self._parse_single_arg(current_arg.strip()))
-        return func_name, args
+            tokens.append(current_arg.strip())
+
+        # 将 tokens 区分为位置参数与关键字参数
+        args: List[Any] = []
+        kwargs: Dict[str, Any] = {}
+        for tok in tokens:
+            if not tok:
+                continue
+            # 检测顶层等号（关键字参数）
+            eq_index = None
+            depth = 0
+            in_str = False
+            str_ch = None
+            for idx, ch in enumerate(tok):
+                if not in_str and ch in ('"', "'"):
+                    in_str = True
+                    str_ch = ch
+                elif in_str and ch == str_ch and (idx == 0 or tok[idx-1] != '\\'):
+                    in_str = False
+                    str_ch = None
+                elif not in_str:
+                    if ch == '(':
+                        depth += 1
+                    elif ch == ')':
+                        depth -= 1
+                    elif ch == '=' and depth == 0:
+                        eq_index = idx
+                        break
+            if eq_index is not None:
+                key = tok[:eq_index].strip()
+                val_str = tok[eq_index+1:].strip()
+                if key:
+                    kwargs[key] = self._parse_single_arg(val_str)
+            else:
+                args.append(self._parse_single_arg(tok))
+
+        return func_name, args, kwargs
 
     def _parse_single_arg(self, arg_str: str):
         arg_str = arg_str.strip()
