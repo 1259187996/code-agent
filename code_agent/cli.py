@@ -6,6 +6,7 @@ from .tools import make_tools
 from .session import SessionStore
 from .memory import MemoryStore
 from .agent import ReActAgent
+from .code_index import CodeIndex
 
 
 @click.command()
@@ -13,7 +14,13 @@ from .agent import ReActAgent
 @click.option("--resume-last", is_flag=True, help="恢复最近一次会话")
 @click.option("--embed-model", type=str, default="all-MiniLM-L6-v2", help="向量模型名（sentence-transformers）")
 @click.option("--reindex-memory", is_flag=True, help="重建记忆向量索引")
-def chat(load_session_id: str | None, resume_last: bool, embed_model: str, reindex_memory: bool):
+@click.option("--index-init", is_flag=True, help="初始化代码索引（文件清单与符号索引）")
+@click.option("--index-rebuild", is_flag=True, help="重建代码索引")
+@click.option("--index-stats", is_flag=True, help="查看代码索引统计")
+@click.option("--index-scope", type=str, default=None, help="限制索引范围（相对路径，如 src）")
+@click.option("--index-chunk-lines", type=int, default=300, help="块大小（行）")
+@click.option("--index-chunk-overlap", type=int, default=50, help="块重叠（行）")
+def chat(load_session_id: str | None, resume_last: bool, embed_model: str, reindex_memory: bool, index_init: bool, index_rebuild: bool, index_stats: bool, index_scope: str | None, index_chunk_lines: int, index_chunk_overlap: int):
     """启动会话模式（REPL）。
 
     - 以当前工作目录作为 project_directory 安全边界
@@ -57,6 +64,15 @@ def chat(load_session_id: str | None, resume_last: bool, embed_model: str, reind
     if reindex_memory:
         msg = memory.reindex()
         print(msg)
+
+    # 代码索引：init / rebuild / stats（混合模式的基础设施）
+    code_index = CodeIndex(project_dir)
+    if index_init:
+        print(code_index.init(scope=index_scope, chunk_lines=index_chunk_lines, chunk_overlap=index_chunk_overlap))
+    if index_rebuild:
+        print(code_index.reindex(scope=index_scope, chunk_lines=index_chunk_lines, chunk_overlap=index_chunk_overlap))
+    if index_stats:
+        print(code_index.stats())
 
     tools = make_tools(project_dir)
     agent = ReActAgent(tools=tools, model="deepseek-chat", project_directory=project_dir, session=session, memory=memory)

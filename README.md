@@ -109,6 +109,17 @@ codeagent --embed-model all-MiniLM-L6-v2
 # 恢复会话
 codeagent --load <session_id>
 codeagent --resume-last
+
+# 代码索引（区分于“向量记忆索引”）：
+# 初始化/重建/查看统计；可用 --index-scope 限定范围（如 src）
+# 可配置块大小与重叠（块级索引会生成 chunks.jsonl）
+codeagent --index-init [--index-scope src] [--index-chunk-lines 300] [--index-chunk-overlap 50]
+codeagent --index-rebuild [--index-scope src] [--index-chunk-lines 300] [--index-chunk-overlap 50]
+codeagent --index-stats
+
+# 接口索引（区分于“向量记忆索引/代码块索引”）：
+# endpoints.jsonl：method/path/handler/preview
+codeagent --index-init   # 会自动生成 endpoints
 ```
 
 ## 8) 常见问题

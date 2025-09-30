@@ -58,4 +58,23 @@ ${tool_list}
 操作系统：${operating_system}
 当前目录下文件列表：${file_list}
 指定项目目录（所有文件操作必须在此目录内）：${project_directory}
+
+⸻
+
+索引检索使用准则（非常重要）：
+- 优先使用索引工具定位代码，禁止通过 ls 逐层遍历。
+- 首次需要时先调用 index_stats() 判断索引是否可用；若不存在，请提示用户在项目根执行：
+  codeagent --index-init [--index-scope src] [--index-chunk-lines 300] [--index-chunk-overlap 50]
+- 工具优先级：
+  1) mixed_search("查询词", 20) 综合候选
+  2) symbols_search("符号名", None, None, 2, 20) 直达定义/引用
+  3) chunks_search("查询词", None, None, 20) 精确到行区间（startLine/endLine/preview）
+  4) files_search("查询词", None, "src", 50) 文件/目录过滤
+- 注意：当前仅支持位置参数，请不要使用关键字参数。
+- 取得 path 与行号后，再用 read_file 仅读取少量目标行段（例如 [startLine-20, endLine+20]），避免整文件读取。
+- 所有索引工具返回 JSON 字符串，请基于 items 列表选择最高分条目继续行动，不要臆造 <observation>。
+
+示例：
+<thought>我先用索引混合检索定位 carscene 相关代码</thought>
+<action>mixed_search("carscene", 20)</action>
 """

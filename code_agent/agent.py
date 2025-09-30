@@ -1,10 +1,12 @@
 import os
+import ast
 import re
 import inspect
 from typing import List, Callable, Tuple
 
 import platform
 from openai import OpenAI
+from dotenv import load_dotenv
 
 from .session import SessionStore
 from .memory import MemoryStore
@@ -54,7 +56,14 @@ class ReActAgent:
 
             if "<final_answer>" in content:
                 final_answer = re.search(r"<final_answer>(.*?)</final_answer>", content, re.DOTALL)
-                final_text = final_answer.group(1)
+                if final_answer:
+                    final_text = final_answer.group(1)
+                else:
+                    # 容错：模型可能缺少闭合标签或格式异常，取起始标签后的剩余内容
+                    try:
+                        final_text = content.split("<final_answer>", 1)[1].strip()
+                    except Exception:
+                        final_text = content.strip()
                 if self.session:
                     try:
                         self.session.update_summary(user_input, final_text)
@@ -74,8 +83,25 @@ class ReActAgent:
             action = action_match.group(1)
             tool_name, args = self.parse_action(action)
 
-            print(f"\n\n🔧 Action: {tool_name}({', '.join(args)})")
-            should_continue = input(f"\n\n是否继续？（Y/N）") if tool_name == "run_terminal_command" else "y"
+            # 打印参数时可能包含非字符串（如 int），需安全转换为字符串
+            try:
+                args_str = ", ".join(str(a) for a in args)
+            except Exception:
+                args_str = ""
+            print(f"\n\n🔧 Action: {tool_name}({args_str})")
+            # 终端命令确认策略：支持 RUN_CMD_CONFIRM_MODE = always | never | only_delete（默认 always）
+            if tool_name == "run_terminal_command":
+                confirm_mode = self._get_run_command_confirm_mode()
+                need_confirm = True
+                if confirm_mode == "never":
+                    need_confirm = False
+                elif confirm_mode == "only_delete":
+                    cmd_str = str(args[0]) if args else ""
+                    need_confirm = self._is_potentially_destructive_command(cmd_str)
+                # 执行确认
+                should_continue = input(f"\n\n是否继续？（Y/N）") if need_confirm else "y"
+            else:
+                should_continue = "y"
             if should_continue.lower() != 'y':
                 print("\n\n操作已取消。")
                 return "操作被用户取消"
@@ -198,5 +224,41 @@ class ReActAgent:
     def get_operating_system_name(self):
         os_map = {"Darwin": "macOS", "Windows": "Windows", "Linux": "Linux"}
         return os_map.get(platform.system(), "Unknown")
+
+    # ===== run_terminal_command 确认策略 =====
+    def _get_run_command_confirm_mode(self) -> str:
+        """从项目 .env 或环境变量读取确认策略。
+
+        可选值："always"（默认）、"never"、"only_delete"。
+        读取顺序：项目 .env -> 环境变量；均无时返回默认值。
+        """
+        # 先尝试从项目 .env 加载（不覆盖已有环境变量）
+        try:
+            dotenv_path = os.path.join(self.project_directory, ".env")
+            if os.path.isfile(dotenv_path):
+                load_dotenv(dotenv_path, override=False)
+        except Exception:
+            pass
+        val = os.getenv("RUN_CMD_CONFIRM_MODE") or os.getenv("CODEAGENT_RUN_CONFIRM") or "always"
+        val = (val or "").strip().lower()
+        return val if val in {"always", "never", "only_delete"} else "always"
+
+    def _is_potentially_destructive_command(self, command: str) -> bool:
+        """粗略判断命令是否具有破坏性（删除/覆写/重置类）。"""
+        if not command:
+            return True
+        cmd = command.strip().lower()
+        dangerous_patterns = [
+            r"(^|[;&|\s])rm\b",
+            r"(^|[;&|\s])rmdir\b",
+            r"(^|[;&|\s])del\b",
+            r"(^|[;&|\s])mkfs\b",
+            r"git\s+reset\s+--hard",
+            r"git\s+clean\s+-fdx",
+        ]
+        for pat in dangerous_patterns:
+            if re.search(pat, cmd):
+                return True
+        return False
 
 
